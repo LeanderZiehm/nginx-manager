@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nginx Dashboard</title>
+<style>
+    body {
+        font-family: monospace;
+        padding: 20px;
+        background: #111;
+        color: #ddd;
+    }
+    h2 { margin-top: 25px; }
+    .active { color: #7CFC00; }
+    .inactive { color: #ff5050; }
+    table { border-collapse: collapse; width: 60%; }
+    td, th { border: 1px solid #444; padding: 8px; }
+    pre {
+        background: #000;
+        border: 1px solid #333;
+        padding: 10px;
+        height: 400px;
+        overflow-y: scroll;
+    }
+    button { margin: 4px; padding: 6px 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h1>Nginx Dashboard</h1>
+
+<h2>Sites</h2>
+<table id="site-table"></table>
+
+<h2>Logs</h2>
+<div id="log-list"></div>
+
+<h2>Log Output</h2>
+<pre id="log-output">Select a log file...</pre>
+
+<script>
+async function loadSites() {
+    const res = await fetch("/api/sites");
+    const data = await res.json();
+    const table = document.getElementById("site-table");
+    table.innerHTML = "<tr><th>Site</th><th>Status</th></tr>";
+
+    data.sites.forEach(s => {
+        const status = s.active ? "active" : "inactive";
+        table.innerHTML += `<tr>
+            <td>${s.name}</td>
+            <td class="${status}">${status}</td>
+        </tr>`;
+    });
+}
+
+async function loadLogs() {
+    const res = await fetch("/api/logs");
+    const data = await res.json();
+    const div = document.getElementById("log-list");
+    div.innerHTML = "";
+
+    data.logs.forEach(log => {
+        div.innerHTML += `<button onclick="viewLog('${log}')">${log}</button>`;
+    });
+}
+
+async function viewLog(name) {
+    const res = await fetch(`/api/logs/${name}?lines=300`);
+    const text = await res.text();
+    document.getElementById("log-output").textContent = text;
+}
+
+// Auto-refresh logs every 3s if viewing one
+setInterval(() => {
+    const pre = document.getElementById("log-output");
+    const current = pre.textContent;
+    if (!current.includes("Select a log")) {
+        // find which log button is marked as active in future version
+    }
+}, 3000);
+
+loadSites();
+loadLogs();
+</script>
+
+</body>
+</html>
