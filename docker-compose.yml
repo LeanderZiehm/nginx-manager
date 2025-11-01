@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  nginx-dashboard:
+    build: .
+    container_name: nginx-dashboard
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./templates:/app/templates:ro
+      - /etc/nginx/sites-available:/etc/nginx/sites-available:ro
+      - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - /var/log/nginx:/var/log/nginx:ro
+    env_file:
+      - .env
+    restart: unless-stopped
+    network_mode: "bridge"
