@@ -44,8 +44,8 @@ async function loadSites() {
     table.innerHTML = `
         <tr>
             <th>Site</th>
-            <th>Status</th>
             <th>Internal Port</th>
+            <th>Status</th>
             <th>HTTP Code</th>
         </tr>`;
 
@@ -55,8 +55,8 @@ async function loadSites() {
         const row = document.createElement("tr");
         row.innerHTML = `
             <td>${s.site}</td>
-            <td class="${statusClass}">${s.active ? "active" : "inactive"}</td>
             <td>${s.internal_port}</td>
+            <td class="${statusClass}">${s.active ? "active" : "inactive"}</td>
             <td id="code-${s.site}">...</td>
         `;
         table.appendChild(row);
