@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -22,44 +22,28 @@ def index(request: Request):
 @app.get("/api/sites")
 def list_sites():
     """
-    Lists nginx sites and extracts both listen ports and server_name / proxy_pass targets.
+    List Nginx sites with server_name values.
     """
     sites = []
-
     for site_file in SITES_AVAILABLE.iterdir():
         if not site_file.is_file():
             continue
 
         active = (SITES_ENABLED / site_file.name).exists()
-        ports, backends = set(), set()
         server_names = set()
 
         try:
             content = site_file.read_text()
-
-            # Parse listen ports (optional, may not be useful)
-            for m in re.findall(r"listen\s+([^;]+);", content):
-                port_match = re.search(r"(\d+)", m)
-                if port_match:
-                    ports.add(port_match.group(1))
-
-            # Parse server_name directives (for real URLs)
+            # Extract server_name directives
             for sn in re.findall(r"server_name\s+([^;]+);", content):
                 server_names.update(sn.strip().split())
-
-            # Optionally parse proxy_pass too
-            for p in re.findall(r"proxy_pass\s+([^;]+);", content):
-                backends.add(p.strip())
-
         except Exception:
-            ports, backends, server_names = {"Error"}, set(), set()
+            server_names = set()
 
         sites.append({
             "name": site_file.name,
             "active": active,
-            "ports": sorted(ports),
             "server_names": sorted(server_names),
-            "backends": sorted(backends),
         })
 
     return {"sites": sites}
@@ -68,7 +52,7 @@ def list_sites():
 @app.get("/api/ping")
 def ping_url(url: str = Query(..., description="Full URL to ping")):
     """
-    Pings a full URL and returns the HTTP status code.
+    Pings the real server_name URL and returns HTTP status.
     """
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "http://" + url  # default to http
@@ -77,7 +61,7 @@ def ping_url(url: str = Query(..., description="Full URL to ping")):
         resp = requests.get(url, timeout=3)
         return {"url": url, "status_code": resp.status_code}
     except requests.RequestException as e:
-        return {"url": url, "error": str(e)}
+        return JSONResponse({"url": url, "error": str(e)}, status_code=502)
 
 
 @app.get("/api/logs")
