@@ -1,9 +1,9 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import re
+import httpx
 
 app = FastAPI(title="Nginx Dashboard")
 
@@ -13,7 +13,6 @@ NGINX_LOG_DIR = Path("/var/log/nginx")
 
 templates = Jinja2Templates(directory="templates")
 
-
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -21,37 +20,59 @@ def index(request: Request):
 
 @app.get("/api/sites")
 def list_sites():
+    """
+    Lists nginx sites and extracts both listen ports and proxy_pass targets.
+    """
     sites = []
 
     for site_file in SITES_AVAILABLE.iterdir():
-        if site_file.is_file():
-            active = (SITES_ENABLED / site_file.name).exists()
+        if not site_file.is_file():
+            continue
 
-            # Read the nginx config and parse listen directives
-            ports = []
-            try:
-                content = site_file.read_text()
-                # Matches things like:
-                # listen 80;
-                # listen 443 ssl;
-                # listen [::]:8080;
-                # listen 127.0.0.1:9000 default_server;
-                matches = re.findall(r"listen\s+([^;]+);", content)
-                for m in matches:
-                    # Clean and normalize ports
-                    port_part = re.search(r"(\d+)", m)
-                    if port_part:
-                        ports.append(port_part.group(1))
-            except Exception:
-                ports = ["Error parsing file"]
+        active = (SITES_ENABLED / site_file.name).exists()
+        ports, backends = set(), set()
 
-            sites.append({
-                "name": site_file.name,
-                "active": active,
-                "ports": sorted(set(ports))
-            })
+        try:
+            content = site_file.read_text()
+
+            # Parse listen ports
+            for m in re.findall(r"listen\s+([^;]+);", content):
+                port_match = re.search(r"(\d+)", m)
+                if port_match:
+                    ports.add(port_match.group(1))
+
+            # Parse proxy_pass destinations
+            for p in re.findall(r"proxy_pass\s+([^;]+);", content):
+                backends.add(p.strip())
+
+        except Exception:
+            ports, backends = {"Error parsing file"}, set()
+
+        sites.append({
+            "name": site_file.name,
+            "active": active,
+            "ports": sorted(ports),
+            "backends": sorted(backends),
+        })
 
     return {"sites": sites}
+
+
+@app.get("/api/ping")
+async def ping_target(url: str = Query(..., description="Full URL to test")):
+    """
+    Backend proxy to check HTTP status of a URL.
+    The frontend calls this since browsers can't reach arbitrary internal ports.
+    """
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    try:
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+        return {"url": url, "status_code": resp.status_code}
+    except Exception as e:
+        return JSONResponse({"url": url, "error": str(e)}, status_code=502)
 
 
 @app.get("/api/logs")
