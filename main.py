@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+import re
 
 app = FastAPI(title="Nginx Dashboard")
 
@@ -12,23 +13,52 @@ NGINX_LOG_DIR = Path("/var/log/nginx")
 
 templates = Jinja2Templates(directory="templates")
 
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+
 @app.get("/api/sites")
 def list_sites():
     sites = []
+
     for site_file in SITES_AVAILABLE.iterdir():
         if site_file.is_file():
             active = (SITES_ENABLED / site_file.name).exists()
-            sites.append({"name": site_file.name, "active": active})
+
+            # Read the nginx config and parse listen directives
+            ports = []
+            try:
+                content = site_file.read_text()
+                # Matches things like:
+                # listen 80;
+                # listen 443 ssl;
+                # listen [::]:8080;
+                # listen 127.0.0.1:9000 default_server;
+                matches = re.findall(r"listen\s+([^;]+);", content)
+                for m in matches:
+                    # Clean and normalize ports
+                    port_part = re.search(r"(\d+)", m)
+                    if port_part:
+                        ports.append(port_part.group(1))
+            except Exception:
+                ports = ["Error parsing file"]
+
+            sites.append({
+                "name": site_file.name,
+                "active": active,
+                "ports": sorted(set(ports))
+            })
+
     return {"sites": sites}
+
 
 @app.get("/api/logs")
 def list_logs():
     logs = [p.name for p in NGINX_LOG_DIR.glob("*")]
     return {"logs": logs}
+
 
 @app.get("/api/logs/{log_file}", response_class=PlainTextResponse)
 def read_log(log_file: str, lines: int = 200):
