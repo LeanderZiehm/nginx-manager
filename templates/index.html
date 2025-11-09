@@ -25,7 +25,7 @@
     <tr>
         <th>Site</th>
         <th>Status</th>
-        <th>Server Names</th>
+        <th>Internal Port</th>
         <th>HTTP Code</th>
     </tr>
 </table>
@@ -45,54 +45,42 @@ async function loadSites() {
         <tr>
             <th>Site</th>
             <th>Status</th>
-            <th>Server Names</th>
+            <th>Internal Port</th>
             <th>HTTP Code</th>
         </tr>`;
 
     for (const s of data.sites) {
         const statusClass = s.active ? "active" : "inactive";
-        const serverNames = s.server_names.length ? s.server_names.join(", ") : "-";
 
         const row = document.createElement("tr");
         row.innerHTML = `
-            <td>${s.name}</td>
+            <td>${s.site}</td>
             <td class="${statusClass}">${s.active ? "active" : "inactive"}</td>
-            <td>${serverNames}</td>
-            <td id="code-${s.name}">...</td>
+            <td>${s.internal_port}</td>
+            <td id="code-${s.site}">...</td>
         `;
         table.appendChild(row);
 
-        if (s.server_names.length > 0) {
-            pingServerNames(s.name, s.server_names, row);
-        } else {
-            row.classList.add("bad");
-            document.getElementById(`code-${s.name}`).textContent = "N/A";
-        }
+        pingSite(s.site, row);
     }
 }
 
-async function pingServerNames(siteName, serverNames, row) {
-    const codeCell = document.getElementById(`code-${siteName}`);
-    let anySuccess = false;
-    const codes = [];
-
-    for (const url of serverNames) {
-        try {
-            const res = await fetch(`/api/ping?url=${encodeURIComponent(url)}`);
-            const data = await res.json();
-            if (data.status_code) {
-                codes.push(data.status_code);
-                if (data.status_code === 200) anySuccess = true;
-            } else if (data.error) {
-                codes.push("ERR");
-            }
-        } catch (e) {
-            codes.push("ERR");
+async function pingSite(site, row) {
+    const codeCell = document.getElementById(`code-${site}`);
+    try {
+        const res = await fetch(`/api/ping?url=${encodeURIComponent(site)}`);
+        const data = await res.json();
+        if (data.status_code) {
+            codeCell.textContent = data.status_code;
+            row.classList.add(data.status_code === 200 ? "good" : "bad");
+        } else {
+            codeCell.textContent = "ERR";
+            row.classList.add("bad");
         }
+    } catch (e) {
+        codeCell.textContent = "ERR";
+        row.classList.add("bad");
     }
-
-    codeCell.textContent = codes.join(", ");
-    row.classList.add(anySuccess ? "good" : "bad");
 }
 
 async function loadLogs() {
