@@ -13,8 +13,8 @@
     h2 { margin-top: 25px; }
     .active { color: #7CFC00; }
     .inactive { color: #ff5050; }
-    table { border-collapse: collapse; width: 60%; }
-    td, th { border: 1px solid #444; padding: 8px; }
+    table { border-collapse: collapse; width: 80%; }
+    td, th { border: 1px solid #444; padding: 8px; text-align: left; }
     pre {
         background: #000;
         border: 1px solid #333;
@@ -23,14 +23,23 @@
         overflow-y: scroll;
     }
     button { margin: 4px; padding: 6px 12px; cursor: pointer; }
+    tr.good { background: #063; color: #9f9; }
+    tr.bad { background: #400; color: #faa; }
 </style>
 </head>
 <body>
 
 <h1>Nginx Dashboard</h1>
 
-<h2>Sites</h2>
-<table id="site-table"></table>
+<h2>Sites (auto-pinging...)</h2>
+<table id="site-table">
+    <tr>
+        <th>Site</th>
+        <th>Status</th>
+        <th>Ports</th>
+        <th>HTTP Code</th>
+    </tr>
+</table>
 
 <h2>Logs</h2>
 <div id="log-list"></div>
@@ -43,15 +52,52 @@ async function loadSites() {
     const res = await fetch("/api/sites");
     const data = await res.json();
     const table = document.getElementById("site-table");
-    table.innerHTML = "<tr><th>Site</th><th>Status</th></tr>";
+    table.innerHTML = `
+        <tr>
+            <th>Site</th>
+            <th>Status</th>
+            <th>Ports</th>
+            <th>HTTP Code</th>
+        </tr>`;
 
-    data.sites.forEach(s => {
+    for (const s of data.sites) {
         const status = s.active ? "active" : "inactive";
-        table.innerHTML += `<tr>
+        const ports = s.ports.length ? s.ports.join(", ") : "-";
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
             <td>${s.name}</td>
             <td class="${status}">${status}</td>
-        </tr>`;
-    });
+            <td>${ports}</td>
+            <td id="code-${s.name}">...</td>
+        `;
+        table.appendChild(row);
+
+        // Try pinging the site (localhost + first port)
+        if (s.ports.length > 0) {
+            const port = s.ports[0];
+            pingSite(s.name, port, row);
+        } else {
+            row.classList.add("bad");
+            document.getElementById(`code-${s.name}`).textContent = "N/A";
+        }
+    }
+}
+
+async function pingSite(siteName, port, row) {
+    const codeCell = document.getElementById(`code-${siteName}`);
+    try {
+        const resp = await fetch(`http://localhost:${port}`, { method: "GET" });
+        codeCell.textContent = resp.status;
+        if (resp.status === 200) {
+            row.classList.add("good");
+        } else {
+            row.classList.add("bad");
+        }
+    } catch (e) {
+        codeCell.textContent = "ERR";
+        row.classList.add("bad");
+    }
 }
 
 async function loadLogs() {
@@ -71,17 +117,11 @@ async function viewLog(name) {
     document.getElementById("log-output").textContent = text;
 }
 
-// Auto-refresh logs every 3s if viewing one
-setInterval(() => {
-    const pre = document.getElementById("log-output");
-    const current = pre.textContent;
-    if (!current.includes("Select a log")) {
-        // find which log button is marked as active in future version
-    }
-}, 3000);
-
+// Load sites and logs
 loadSites();
 loadLogs();
+
+// Optional: auto-refresh logs every few seconds in the future
 </script>
 
 </body>
