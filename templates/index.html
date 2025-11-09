@@ -4,22 +4,11 @@
 <meta charset="UTF-8">
 <title>Nginx Dashboard</title>
 <style>
-    body {
-        font-family: monospace;
-        padding: 20px;
-        background: #111;
-        color: #ddd;
-    }
+    body { font-family: monospace; padding: 20px; background: #111; color: #ddd; }
     h2 { margin-top: 25px; }
     table { border-collapse: collapse; width: 90%; }
     td, th { border: 1px solid #444; padding: 8px; text-align: left; }
-    pre {
-        background: #000;
-        border: 1px solid #333;
-        padding: 10px;
-        height: 400px;
-        overflow-y: scroll;
-    }
+    pre { background: #000; border: 1px solid #333; padding: 10px; height: 400px; overflow-y: scroll; }
     button { margin: 4px; padding: 6px 12px; cursor: pointer; }
     tr.good { background: #063; color: #9f9; }
     tr.bad { background: #400; color: #faa; }
@@ -36,7 +25,7 @@
     <tr>
         <th>Site</th>
         <th>Status</th>
-        <th>Backends</th>
+        <th>Server Names</th>
         <th>HTTP Code</th>
     </tr>
 </table>
@@ -56,26 +45,25 @@ async function loadSites() {
         <tr>
             <th>Site</th>
             <th>Status</th>
-            <th>Backends</th>
+            <th>Server Names</th>
             <th>HTTP Code</th>
         </tr>`;
 
     for (const s of data.sites) {
         const statusClass = s.active ? "active" : "inactive";
-        const backends = s.backends.length ? s.backends.join(", ") : "-";
+        const serverNames = s.server_names.length ? s.server_names.join(", ") : "-";
 
         const row = document.createElement("tr");
         row.innerHTML = `
             <td>${s.name}</td>
             <td class="${statusClass}">${s.active ? "active" : "inactive"}</td>
-            <td>${backends}</td>
+            <td>${serverNames}</td>
             <td id="code-${s.name}">...</td>
         `;
         table.appendChild(row);
 
-        // Ping backends one by one (server-side)
-        if (s.backends.length > 0) {
-            pingBackends(s.name, s.backends, row);
+        if (s.server_names.length > 0) {
+            pingServerNames(s.name, s.server_names, row);
         } else {
             row.classList.add("bad");
             document.getElementById(`code-${s.name}`).textContent = "N/A";
@@ -83,12 +71,12 @@ async function loadSites() {
     }
 }
 
-async function pingBackends(siteName, backends, row) {
+async function pingServerNames(siteName, serverNames, row) {
     const codeCell = document.getElementById(`code-${siteName}`);
     let anySuccess = false;
     const codes = [];
 
-    for (const url of backends) {
+    for (const url of serverNames) {
         try {
             const res = await fetch(`/api/ping?url=${encodeURIComponent(url)}`);
             const data = await res.json();
